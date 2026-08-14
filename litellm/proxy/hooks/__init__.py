@@ -2,6 +2,7 @@ import os
 from typing import Final, Literal
 
 from . import *
+from .aws_gpu_controller import AWSGPUControllerHook
 from .cache_control_check import _PROXY_CacheControlCheck
 from .litellm_skills import SkillsInjectionHook
 from .max_budget_limiter import _PROXY_MaxBudgetLimiter
@@ -25,6 +26,7 @@ PROXY_HOOKS: Final = {
     "max_iterations_limiter": _PROXY_MaxIterationsHandler,
     "max_budget_per_session_limiter": _PROXY_MaxBudgetPerSessionHandler,
     "sensitive_data_routing": _PROXY_SensitiveDataRoutingHandler,
+    "aws_gpu_controller": AWSGPUControllerHook,
 }
 
 ## FEATURE FLAG HOOKS ##

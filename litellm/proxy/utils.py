@@ -549,6 +549,7 @@ class ProxyLogging:
         Add proxy hooks to litellm.callbacks
         """
         from litellm.proxy.proxy_server import prisma_client
+        from litellm.proxy.proxy_server import general_settings as proxy_general_settings
 
         for hook in PROXY_HOOKS:
             proxy_hook = get_proxy_hook(hook)
@@ -563,6 +564,12 @@ class ProxyLogging:
                 passed_in_args["internal_usage_cache"] = self.internal_usage_cache
             if "prisma_client" in expected_args:
                 passed_in_args["prisma_client"] = prisma_client
+            if "llm_router" in expected_args:
+                passed_in_args["llm_router"] = llm_router
+            if "general_settings" in expected_args:
+                passed_in_args["general_settings"] = proxy_general_settings
+            if "pod_lock_manager" in expected_args:
+                passed_in_args["pod_lock_manager"] = self.db_spend_update_writer.pod_lock_manager
             proxy_hook_obj = cast(CustomLogger, proxy_hook(**passed_in_args))
             litellm.logging_callback_manager.add_litellm_callback(proxy_hook_obj)
 
@@ -613,6 +620,10 @@ class ProxyLogging:
                 litellm.logging_callback_manager.add_litellm_failure_callback(callback)
                 litellm.logging_callback_manager.add_litellm_async_success_callback(callback)
                 litellm.logging_callback_manager.add_litellm_async_failure_callback(callback)
+
+        gpu_controller_hook = self.get_proxy_hook("aws_gpu_controller")
+        if gpu_controller_hook is not None and hasattr(gpu_controller_hook, "start_background_tasks"):
+            gpu_controller_hook.start_background_tasks()
 
     async def update_request_status(self, litellm_call_id: str, status: Literal["success", "fail"]):
         # only use this if slack alerting is being used
