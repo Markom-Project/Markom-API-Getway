@@ -8,12 +8,23 @@ import hashlib
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from markom_gateway.admin_service.routes.auth import router as auth_router
+from markom_gateway.admin_service.routes.home import router as home_router
+from markom_gateway.admin_service.routes.cost import router as cost_router
+from markom_gateway.admin_service.routes.usage import router as usage_router
+from markom_gateway.admin_service.routes.providers import router as providers_router
+from markom_gateway.admin_service.routes.guardrails import router as guardrails_router
+from markom_gateway.admin_service.routes.accounts import router as accounts_router
+from markom_gateway.admin_service.routes.settings import router as settings_router
 
 logger = logging.getLogger("markom_gateway.admin_service")
 
@@ -33,6 +44,10 @@ app.add_middleware(
 
 LITELLM_PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
 LITELLM_MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", os.environ.get("MARKOM_MASTER_KEY", ""))
+
+UI_DIR = Path(__file__).parent / "markom_admin" / "ui"
+if UI_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(UI_DIR / "static")), name="static")
 
 
 # ── Models ──────────────────────────────────────────────────────────
@@ -365,6 +380,18 @@ async def update_team(
     return await _proxy_to_litellm("POST", "/team/update", body, user_info)
 
 
+# ── Dashboard Routers ───────────────────────────────────────────────
+
+app.include_router(auth_router)
+app.include_router(home_router)
+app.include_router(cost_router)
+app.include_router(usage_router)
+app.include_router(providers_router)
+app.include_router(guardrails_router)
+app.include_router(accounts_router)
+app.include_router(settings_router)
+
+
 # ── Health ──────────────────────────────────────────────────────────
 
 
@@ -375,6 +402,9 @@ async def health():
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
+    index_path = UI_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path), media_type="text/html")
     return """
     <!DOCTYPE html>
     <html>
@@ -394,13 +424,24 @@ async def root():
         <h1>MarKom Gateway Admin Service</h1>
         <p>RBAC-gated management endpoints for MarKom Gateway.</p>
         <h2>Endpoints</h2>
+        <div class="endpoint"><span class="method">GET</span> /api/auth/me — Current user profile</div>
         <div class="endpoint"><span class="method">GET</span> /api/roles/list — List users and roles</div>
         <div class="endpoint"><span class="method">POST</span> /api/roles/assign — Assign a role to a user</div>
         <div class="endpoint"><span class="method">DELETE</span> /api/roles/remove — Remove a user role</div>
         <div class="endpoint"><span class="method">GET</span> /api/roles/check — Check a user's permission</div>
+        <div class="endpoint"><span class="method">GET</span> /api/settings/roles — List role templates</div>
+        <div class="endpoint"><span class="method">POST</span> /api/settings/roles — Create custom role</div>
+        <div class="endpoint"><span class="method">PUT</span> /api/settings/roles/{slug} — Update role template</div>
+        <div class="endpoint"><span class="method">DELETE</span> /api/settings/roles/{slug} — Delete custom role</div>
+        <div class="endpoint"><span class="method">GET</span> /api/accounts — List user accounts</div>
+        <div class="endpoint"><span class="method">POST</span> /api/accounts — Create account</div>
+        <div class="endpoint"><span class="method">GET</span> /api/home/summary — Home tab summary</div>
+        <div class="endpoint"><span class="method">GET</span> /api/cost/summary — Cost summary</div>
+        <div class="endpoint"><span class="method">GET</span> /api/usage/requests — Usage requests</div>
+        <div class="endpoint"><span class="method">GET</span> /api/providers/health — Provider health</div>
+        <div class="endpoint"><span class="method">GET</span> /api/guardrails/audit — Audit trail</div>
         <div class="endpoint"><span class="method">GET</span> /api/audit/records — Query audit records</div>
         <div class="endpoint"><span class="method">GET</span> /api/audit/stats — Get audit statistics</div>
-        <div class="endpoint"><span class="method">GET</span> /api/audit/export — Export audit records (CSV/JSON)</div>
         <div class="endpoint"><span class="method">POST</span> /api/cache/purge — Purge semantic cache</div>
         <div class="endpoint"><span class="method">POST</span> /api/keys/generate — Generate an API key</div>
         <div class="endpoint"><span class="method">GET</span> /api/keys — List API keys</div>
@@ -410,3 +451,11 @@ async def root():
     </body>
     </html>
     """
+
+
+@app.get("/dashboard")
+async def dashboard():
+    index_path = UI_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path), media_type="text/html")
+    raise HTTPException(status_code=404, detail="Dashboard not deployed yet")
