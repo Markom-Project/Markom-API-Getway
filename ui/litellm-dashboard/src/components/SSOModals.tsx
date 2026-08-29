@@ -393,8 +393,8 @@ const SSOModals: React.FC<SSOModalsProps> = ({
               <Button2
                 onClick={() => setIsClearConfirmModalVisible(true)}
                 style={{
-                  backgroundColor: "#6366f1",
-                  borderColor: "#6366f1",
+                  backgroundColor: "#120505",
+                  borderColor: "#120505",
                   color: "white",
                 }}
                 onMouseEnter={(e) => {
@@ -402,8 +402,8 @@ const SSOModals: React.FC<SSOModalsProps> = ({
                   e.currentTarget.style.borderColor = "#5558eb";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = "#6366f1";
-                  e.currentTarget.style.borderColor = "#6366f1";
+                  e.currentTarget.style.backgroundColor = "#120505";
+                  e.currentTarget.style.borderColor = "#120505";
                 }}
               >
                 Clear

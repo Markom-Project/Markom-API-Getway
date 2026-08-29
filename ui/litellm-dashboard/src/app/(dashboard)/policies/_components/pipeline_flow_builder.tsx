@@ -126,7 +126,7 @@ const GuardrailIcon: React.FC = () => (
       height="14"
       viewBox="0 0 24 24"
       fill="none"
-      stroke="#6366f1"
+      stroke="#120505"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -232,7 +232,7 @@ const Connector: React.FC<ConnectorProps> = ({ onInsert }) => (
         transition: "all 0.15s ease",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "#6366f1";
+        e.currentTarget.style.borderColor = "#120505";
         e.currentTarget.style.backgroundColor = "#eef2ff";
       }}
       onMouseLeave={(e) => {
@@ -293,7 +293,7 @@ const StepCard: React.FC<StepCardProps> = ({
               fontSize: 11,
               fontWeight: 700,
               textTransform: "uppercase",
-              color: "#6366f1",
+              color: "#120505",
               letterSpacing: "0.06em",
             }}
           >
@@ -661,7 +661,7 @@ export const PipelineInfoDisplay: React.FC<PipelineInfoDisplayProps> = ({ pipeli
                   fontSize: 11,
                   fontWeight: 700,
                   textTransform: "uppercase",
-                  color: "#6366f1",
+                  color: "#120505",
                   letterSpacing: "0.06em",
                 }}
               >
@@ -1207,7 +1207,7 @@ const PolicyVersionsSidebar: React.FC<PolicyVersionsSidebarProps> = ({
                       textAlign: "left",
                       padding: "10px 12px",
                       borderRadius: 8,
-                      border: isActive ? "1px solid #6366f1" : "1px solid #e5e7eb",
+                      border: isActive ? "1px solid #120505" : "1px solid #e5e7eb",
                       backgroundColor: isActive ? "#eef2ff" : "#fff",
                       cursor: "pointer",
                     }}
@@ -1304,7 +1304,7 @@ const PolicyVersionsSidebar: React.FC<PolicyVersionsSidebarProps> = ({
                 fontSize: 10,
                 fontWeight: 600,
                 backgroundColor: "#eef2ff",
-                color: "#6366f1",
+                color: "#120505",
                 padding: "2px 6px",
                 borderRadius: 4,
               }}
@@ -1570,7 +1570,7 @@ export const FlowBuilderPage: React.FC<FlowBuilderPageProps> = ({
               fontSize: 11,
               fontWeight: 600,
               backgroundColor: "#eef2ff",
-              color: "#6366f1",
+              color: "#120505",
               padding: "3px 8px",
               borderRadius: 4,
               letterSpacing: "0.02em",

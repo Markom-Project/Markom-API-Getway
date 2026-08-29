@@ -36,7 +36,7 @@ export default function EvalViewer({ data }: EvalViewerProps) {
   return (
     <div className="mb-6">
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <ExperimentOutlined style={{ fontSize: 16, color: "#6366f1" }} />
+        <ExperimentOutlined style={{ fontSize: 16, color: "#120505" }} />
         <Text strong style={{ fontSize: 15 }}>
           LLM Judge Results
         </Text>

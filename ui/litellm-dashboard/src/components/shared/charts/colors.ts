@@ -10,7 +10,7 @@ export const CHART_COLOR_HEX = {
   yellow: "#eab308",
   lime: "#84cc16",
   green: "#22c55e",
-  emerald: "#10b981",
+  emerald: "#120505",
   teal: "#14b8a6",
   cyan: "#06b6d4",
   sky: "#0ea5e9",
