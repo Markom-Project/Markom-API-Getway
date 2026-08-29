@@ -85,6 +85,7 @@ See **[LOCAL_DEV.md](LOCAL_DEV.md)** for the full reference with purpose descrip
 ### Minimum required for local testing
 
 ```bash
+GOOGLE_API_KEY=your-gemini-api-key
 OPENAI_API_KEY=sk-your-key-here
 MARKOM_MASTER_KEY=sk-markom-secret-key-change-me
 MARKOM_DATABASE_URL=postgresql://llmproxy:dbpassword9090@db:5432/litellm
@@ -94,7 +95,7 @@ MARKOM_REDIS_URL=redis://redis:6379
 ## Features
 
 ### Semantic Caching
-Caches near-duplicate prompts using vector similarity search (FAISS). Returns cached response without calling the LLM on cache hit. Configurable threshold (default: 0.95), per-model skip list, manual purge endpoint.
+Caches near-duplicate prompts using vector similarity search (FAISS). Embeddings are generated via Gemini API through LiteLLM's interface — no local embedding models needed. Returns cached response without calling the LLM on cache hit. Configurable threshold (default: 0.95), per-model skip list, manual purge endpoint.
 
 ### Health-Based Rolling Routing
 Records per-provider latency, error rate, and timeout rate in Redis. Rewrites routing to prefer the healthiest provider. Rolling 5-minute scoring window, 2% exploration factor.

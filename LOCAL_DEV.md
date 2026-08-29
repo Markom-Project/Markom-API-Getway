@@ -114,13 +114,13 @@ At least one is required to make real LLM requests. Without them, the proxy star
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `MARKOM_CACHE_BACKEND` | `"faiss"` | `"faiss"` = local vector search (no external service). `"pinecone"` = cloud vector DB (requires Pinecone key). |
-| `MARKOM_EMBEDDING_MODEL` | `"text-embedding-3-small"` | OpenAI embedding model for converting prompts to vectors. Requires `OPENAI_API_KEY`. |
+| `MARKOM_EMBEDDING_MODEL` | `"gemini/text-embedding-004"` | Embedding model for converting prompts to vectors. Uses Gemini via LiteLLM. Requires `GOOGLE_API_KEY`. |
 | `MARKOM_CACHE_SIMILARITY_THRESHOLD` | `"0.95"` | Minimum cosine similarity (0.0–1.0) to consider two prompts a "match". Higher = stricter, fewer cache hits. |
 | `MARKOM_CACHE_TTL` | `"3600"` | How long (seconds) a cache entry lives before expiring. 3600 = 1 hour. |
 | `MARKOM_CACHE_MAX_ENTRIES` | `"10000"` | Maximum cache entries before oldest are evicted. |
 | `MARKOM_CACHE_SKIP_MODELS` | `""` | Comma-separated model names to never cache (e.g. `"gpt-5,claude-sonnet-4-20250514"`). Use for time-sensitive or streaming models. |
 
-**Local dev tip:** FAISS works entirely locally — no API calls, no cost. Set threshold to `0.80` during testing to get more cache hits.
+**Local dev tip:** FAISS stores vectors locally — no local embedding models needed. Embeddings are generated via Gemini API (requires `GOOGLE_API_KEY`). Set threshold to `0.80` during testing to get more cache hits.
 
 ### Health Router
 
@@ -187,7 +187,8 @@ At least one is required to make real LLM requests. Without them, the proxy star
 ## Minimum .env for Local Testing
 
 ```bash
-# Required: at least one LLM key
+# Required: at least one LLM key + Gemini for embeddings
+GOOGLE_API_KEY=your-gemini-api-key
 OPENAI_API_KEY=sk-your-key-here
 
 # Required: admin access
@@ -200,9 +201,9 @@ MARKOM_DATABASE_URL=postgresql://llmproxy:dbpassword9090@db:5432/litellm
 MARKOM_REDIS_ENABLED=true
 MARKOM_REDIS_URL=redis://redis:6379
 
-# Cache (local FAISS, no external service needed)
+# Cache (local FAISS, embeddings via Gemini API)
 MARKOM_CACHE_BACKEND=faiss
-MARKOM_EMBEDDING_MODEL=text-embedding-3-small
+MARKOM_EMBEDDING_MODEL=gemini/text-embedding-004
 MARKOM_CACHE_SIMILARITY_THRESHOLD=0.90
 
 # Audit (safe defaults for dev)
@@ -271,17 +272,17 @@ curl -X POST http://localhost:8000/api/compliance/principal/export \
 ### 5. Test semantic cache (send same prompt twice)
 
 ```bash
-# First call — cache miss, hits LLM
+# First call — cache miss, hits Gemini for embedding + LLM
 curl http://localhost:4000/chat/completions \
   -H "Authorization: Bearer sk-markom-secret-key-change-me" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"What is 2+2?"}]}'
+  -d '{"model":"gemini-2.0-flash","messages":[{"role":"user","content":"What is 2+2?"}]}'
 
 # Second call — cache hit, returns instantly
 curl http://localhost:4000/chat/completions \
   -H "Authorization: Bearer sk-markom-secret-key-change-me" \
   -H "Content-Type: application/json" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"What is 2+2?"}]}'
+  -d '{"model":"gemini-2.0-flash","messages":[{"role":"user","content":"What is 2+2?"}]}'
 ```
 
 ---

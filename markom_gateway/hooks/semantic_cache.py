@@ -1,6 +1,9 @@
 """
 MarKom Semantic Cache — CustomGuardrail for similarity-based prompt caching.
 
+Uses LiteLLM's embedding interface to call Gemini (or any supported provider).
+No local embedding models needed — embeddings are generated via API.
+
 Supports two backends:
   - FAISS (local, default) — good for single-node deployments
   - Pinecone (cloud) — set PINECONE_API_KEY + PINECONE_INDEX_NAME to enable
@@ -26,20 +29,6 @@ _semantic_cache_state: dict[str, Any] = {
     "initialized": False,
     "pinecone_index": None,
 }
-
-
-def _get_embedder(model_name: str):
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        raise ImportError(
-            "sentence-transformers is required for semantic caching. "
-            "Install with: pip install sentence-transformers"
-        )
-    cache_key = f"_embedder_{model_name}"
-    if cache_key not in _semantic_cache_state:
-        _semantic_cache_state[cache_key] = SentenceTransformer(model_name)
-    return _semantic_cache_state[cache_key]
 
 
 def _get_faiss_index(dimension: int):
@@ -81,7 +70,7 @@ def _get_pinecone_index():
     if index_name not in existing:
         pc.create_index(
             name=index_name,
-            dimension=1536,
+            dimension=768,
             metric="cosine",
             spec=ServerlessSpec(cloud="aws", region="us-east-1"),
         )
@@ -103,12 +92,23 @@ def _hash_response(response_text: str) -> str:
     return hashlib.sha256(response_text.encode()).hexdigest()[:16]
 
 
+def _get_embedding_via_litellm(text: str, model: str) -> list[float]:
+    """Generate embedding using LiteLLM's interface (supports Gemini, OpenAI, etc.)."""
+    import litellm
+
+    response = litellm.embeddings(
+        model=model,
+        input=[text],
+    )
+    return response.data[0].embedding
+
+
 class MarkomSemanticCache(CustomGuardrail):
     def __init__(
         self,
         similarity_threshold: float = 0.95,
         cache_ttl_seconds: int = 3600,
-        embedding_model: str = "text-embedding-3-small",
+        embedding_model: str = "gemini/text-embedding-004",
         cache_max_entries: int = 10000,
         **kwargs,
     ):
@@ -119,9 +119,7 @@ class MarkomSemanticCache(CustomGuardrail):
         self.cache_max_entries = cache_max_entries
 
     def _get_embedding(self, text: str) -> list[float]:
-        embedder = _get_embedder(self.embedding_model)
-        embedding = embedder.encode([text], normalize_embeddings=True)
-        return embedding[0].tolist()
+        return _get_embedding_via_litellm(text, self.embedding_model)
 
     def _extract_prompt_text(self, data: dict) -> str:
         messages = data.get("messages", [])

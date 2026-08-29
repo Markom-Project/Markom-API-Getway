@@ -1,9 +1,9 @@
 # MarKom Gateway dependencies
 # Core: litellm is installed separately via pip
 
-# Semantic cache
-sentence-transformers>=3.0.0
-faiss-cpu>=1.8.0
+# Semantic cache — uses LiteLLM's embedding interface (Gemini/OpenAI/etc.)
+# No sentence-transformers needed; embeddings are generated via API.
+numpy>=1.24.0
 
 # Health router + audit logger
 redis>=5.0.0
