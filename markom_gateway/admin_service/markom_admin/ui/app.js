@@ -1,5 +1,5 @@
 /**
- * MarKom App — SPA router, auth flow, tab switching
+ * MarKom App — SPA router, auth flow, tab switching, keyboard navigation
  */
 (function() {
     const STORAGE_KEY = 'markom_api_key';
@@ -62,6 +62,7 @@
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
         toast.textContent = message;
+        toast.setAttribute('role', 'status');
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
     }
@@ -69,9 +70,12 @@
     window.__showToast = showToast;
 
     window.__closeModal = function() {
-        document.getElementById('modal-overlay').style.display = 'none';
+        const overlay = document.getElementById('modal-overlay');
+        overlay.style.display = 'none';
+        overlay.removeAttribute('aria-hidden');
         const modal = document.querySelector('.modal');
         if (modal) modal.remove();
+        document.body.focus();
     };
 
     window.__openModal = function(title, bodyHtml, footerHtml) {
@@ -81,12 +85,39 @@
         if (existing) existing.remove();
         const modal = document.createElement('div');
         modal.className = 'modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-label', title);
         modal.innerHTML = `
             <div class="modal-header">${title}</div>
             <div class="modal-body">${bodyHtml}</div>
             ${footerHtml ? `<div class="modal-footer">${footerHtml}</div>` : ''}
         `;
         document.body.appendChild(modal);
+
+        // Focus first input in modal
+        const firstInput = modal.querySelector('input, select, textarea');
+        if (firstInput) setTimeout(() => firstInput.focus(), 50);
+
+        // Trap focus in modal
+        modal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                window.__closeModal();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+            const focusable = modal.querySelectorAll('input, select, textarea, button, [tabindex]:not([tabindex="-1"])');
+            if (focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        });
     };
 
     function renderSidebar() {
@@ -95,8 +126,10 @@
         if (!currentUser || !currentUser.tabs) return;
 
         currentUser.tabs.forEach(tab => {
-            const item = document.createElement('div');
+            const item = document.createElement('button');
             item.className = `nav-item${currentPage === tab.slug ? ' active' : ''}`;
+            item.setAttribute('aria-label', `${tab.label} tab`);
+            item.setAttribute('aria-current', currentPage === tab.slug ? 'page' : 'false');
             item.innerHTML = `${ICONS[tab.icon] || ''}<span>${tab.label}</span>`;
             item.onclick = () => {
                 window.location.hash = `#/${tab.slug}`;
@@ -181,6 +214,9 @@
         } else {
             content.innerHTML = `<div class="empty-state"><p>Page "${slug}" not available</p></div>`;
         }
+
+        // Move focus to page content for screen readers
+        content.focus();
     }
 
     function renderLogin() {
@@ -191,13 +227,15 @@
         content.innerHTML = `
             <div style="display:flex;align-items:center;justify-content:center;min-height:80vh;">
                 <div class="card" style="width:400px;text-align:center;">
-                    <div style="font-size:36px;font-weight:700;color:var(--brand);margin-bottom:8px;">MarKom Gateway</div>
-                    <div style="color:var(--gray400);margin-bottom:24px;">Enter your API key to sign in</div>
-                    <div class="form-group" style="text-align:left;">
-                        <label class="form-label">API Key</label>
-                        <input type="password" id="login-key" class="form-input" placeholder="sk-..." autocomplete="off">
-                    </div>
-                    <button class="btn btn-primary" style="width:100%;" onclick="window.__doLogin()">Sign In</button>
+                    <div style="font-size:36px;font-weight:700;color:var(--text-brand);margin-bottom:8px;">MarKom Gateway</div>
+                    <div style="color:var(--text-tertiary);margin-bottom:24px;">Enter your API key to sign in</div>
+                    <form onsubmit="event.preventDefault(); window.__doLogin();" aria-label="Login form">
+                        <div class="form-group" style="text-align:left;">
+                            <label class="form-label" for="login-key">API Key</label>
+                            <input type="password" id="login-key" class="form-input" placeholder="sk-..." autocomplete="off" required aria-required="true">
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width:100%;">Sign In</button>
+                    </form>
                 </div>
             </div>
         `;
@@ -229,20 +267,21 @@
         }
     };
 
-    window.__openModal = function(title, bodyHtml, footerHtml) {
-        const overlay = document.getElementById('modal-overlay');
-        overlay.style.display = 'block';
-        const existing = document.querySelector('.modal');
-        if (existing) existing.remove();
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-header">${title}</div>
-            <div class="modal-body">${bodyHtml}</div>
-            ${footerHtml ? `<div class="modal-footer">${footerHtml}</div>` : ''}
-        `;
-        document.body.appendChild(modal);
-    };
+    // Keyboard navigation: arrow keys in sidebar
+    document.addEventListener('keydown', (e) => {
+        const sidebar = document.getElementById('sidebar-nav');
+        if (!sidebar || document.activeElement?.closest('#sidebar-nav') !== sidebar) return;
+        const items = [...sidebar.querySelectorAll('.nav-item')];
+        const idx = items.indexOf(document.activeElement);
+        if (idx === -1) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            items[Math.min(idx + 1, items.length - 1)].focus();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            items[Math.max(idx - 1, 0)].focus();
+        }
+    });
 
     window.addEventListener('hashchange', render);
     window.addEventListener('DOMContentLoaded', () => {

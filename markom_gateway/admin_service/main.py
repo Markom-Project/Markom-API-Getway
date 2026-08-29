@@ -25,6 +25,8 @@ from markom_gateway.admin_service.routes.providers import router as providers_ro
 from markom_gateway.admin_service.routes.guardrails import router as guardrails_router
 from markom_gateway.admin_service.routes.accounts import router as accounts_router
 from markom_gateway.admin_service.routes.settings import router as settings_router
+from markom_gateway.admin_service.routes.compliance import router as compliance_router
+from markom_gateway.admin_service.routes.incidents import router as incidents_router
 
 logger = logging.getLogger("markom_gateway.admin_service")
 
@@ -390,6 +392,50 @@ app.include_router(providers_router)
 app.include_router(guardrails_router)
 app.include_router(accounts_router)
 app.include_router(settings_router)
+app.include_router(compliance_router)
+app.include_router(incidents_router)
+
+
+# ── Legal Safety Guard ────────────────────────────────────────────
+# Verify no enterprise/ code is present at import time.
+_enterprise_check_done = False
+
+def _check_no_enterprise():
+    global _enterprise_check_done
+    if _enterprise_check_done:
+        return
+    _enterprise_check_done = True
+    import importlib
+    try:
+        # If enterprise module is importable, warn loudly
+        importlib.import_module("litellm.enterprise")
+        logger.warning(
+            "LEGAL WARNING: litellm.enterprise module is importable. "
+            "This build must not use or reference enterprise features."
+        )
+    except (ImportError, ModuleNotFoundError):
+        pass  # Expected — enterprise module should not be present
+
+_check_no_enterprise()
+
+
+# ── Auto-Purge on Startup ──────────────────────────────────────────
+
+@app.on_event("startup")
+async def _auto_purge_startup():
+    """Run retention purge on startup using configured windows."""
+    import os
+    from markom_gateway.hooks.audit_logger import MarkomAuditLogger
+
+    audit_days = int(os.environ.get("MARKOM_AUDIT_RETENTION_DAYS", "90"))
+    prompt_days = int(os.environ.get("MARKOM_PROMPT_RETENTION_DAYS", "30"))
+
+    audit_deleted = MarkomAuditLogger.purge_old_records(audit_days)
+    prompt_redacted = MarkomAuditLogger.purge_old_prompt_content(prompt_days)
+    logger.info(
+        "Startup purge: %d audit records deleted, %d prompt contents redacted",
+        audit_deleted, prompt_redacted,
+    )
 
 
 # ── Health ──────────────────────────────────────────────────────────

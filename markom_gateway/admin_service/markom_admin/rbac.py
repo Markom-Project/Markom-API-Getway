@@ -461,6 +461,8 @@ class RBACService:
 
     @staticmethod
     def remove_user(user_external_id: str, team_id: str = None) -> bool:
+        """Remove user. Audit trail is preserved — user_id is set to NULL
+        in audit_log records so compliance history is not lost."""
         pool = _get_db_pool()
         if pool is None:
             return False
@@ -474,6 +476,12 @@ class RBACService:
                 if not row:
                     return False
                 user_db_id = row[0]
+
+                # Nullify user_id in audit trail (preserve records, lose association)
+                conn.execute(
+                    "UPDATE markom_audit_log SET user_id = NULL WHERE user_id = %s",
+                    (user_external_id,),
+                )
 
                 if team_id:
                     conn.execute(

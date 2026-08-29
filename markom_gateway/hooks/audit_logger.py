@@ -2,7 +2,11 @@
 MarKom Audit Logger — CustomLogger for structured, append-only audit trail.
 
 Captures every request as an immutable JSON record for DPDPA compliance.
-Supports configurable retention and content redaction.
+Supports:
+  - Purpose limitation: records why data was processed (team, feature, use_case)
+  - Configurable redaction: per-team opt-in for raw prompt/response retention
+  - Data principal export/delete: fulfill DPDPA right to erasure
+  - Configurable retention: per-data-type windows with auto-purge
 """
 
 import json
@@ -68,6 +72,11 @@ def _ensure_audit_table(pool):
                     metadata JSONB,
                     prompt_content TEXT,
                     response_content TEXT,
+                    purpose_team TEXT,
+                    purpose_feature TEXT,
+                    purpose_use_case TEXT,
+                    data_principal_id TEXT,
+                    redacted BOOLEAN DEFAULT FALSE,
                     UNIQUE(request_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON markom_audit_log (timestamp);
@@ -75,6 +84,8 @@ def _ensure_audit_table(pool):
                 CREATE INDEX IF NOT EXISTS idx_audit_team ON markom_audit_log (team_id);
                 CREATE INDEX IF NOT EXISTS idx_audit_model ON markom_audit_log (model);
                 CREATE INDEX IF NOT EXISTS idx_audit_status ON markom_audit_log (status);
+                CREATE INDEX IF NOT EXISTS idx_audit_principal ON markom_audit_log (data_principal_id);
+                CREATE INDEX IF NOT EXISTS idx_audit_purpose_team ON markom_audit_log (purpose_team);
                 """
             )
             conn.commit()
@@ -99,10 +110,20 @@ def _hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()[:16]
 
 
+def _team_allows_raw_content(team_id: str) -> bool:
+    """Check if a team has opted in to storing raw prompt/response content."""
+    if not team_id:
+        return False
+    opt_in_teams = os.environ.get("MARKOM_AUDIT_RAW_CONTENT_TEAMS", "")
+    if not opt_in_teams:
+        return False
+    return team_id in [t.strip() for t in opt_in_teams.split(",") if t.strip()]
+
+
 class MarkomAuditLogger(CustomLogger):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.redact_content = os.environ.get(
+        self.global_redact = os.environ.get(
             "MARKOM_AUDIT_REDACT_CONTENT", "false"
         ).lower() == "true"
 
@@ -159,9 +180,17 @@ class MarkomAuditLogger(CustomLogger):
             if hasattr(response_obj, "usage") and response_obj.usage:
                 cost = getattr(response_obj, "response_cost", 0.0) or 0.0
 
+        team_id = (
+            getattr(user_api_key_dict, "team_id", "")
+            if hasattr(user_api_key_dict, "team_id")
+            else (user_api_key_dict.get("team_id", "") if isinstance(user_api_key_dict, dict) else "")
+        )
+
+        # Determine redaction: global flag OR per-team opt-out
+        should_redact = self.global_redact or not _team_allows_raw_content(team_id)
         prompt_content = None
         response_content = None
-        if not self.redact_content:
+        if not should_redact:
             messages = kwargs.get("messages", [])
             if messages:
                 prompt_content = json.dumps(messages, default=str)[:10000]
@@ -175,15 +204,19 @@ class MarkomAuditLogger(CustomLogger):
         metadata = kwargs.get("metadata", {})
         routing_decision = metadata.get("routing_decision", {})
 
+        # Purpose limitation fields
+        purpose_team = metadata.get("purpose_team", team_id or "")
+        purpose_feature = metadata.get("purpose_feature", "")
+        purpose_use_case = metadata.get("purpose_use_case", "")
+        data_principal_id = metadata.get("data_principal_id", "")
+
         record = {
             "timestamp": time.time(),
             "request_id": metadata.get("request_id", ""),
             "user_id": getattr(user_api_key_dict, "user_id", "")
             if hasattr(user_api_key_dict, "user_id")
             else (user_api_key_dict.get("user_id", "") if isinstance(user_api_key_dict, dict) else ""),
-            "team_id": getattr(user_api_key_dict, "team_id", "")
-            if hasattr(user_api_key_dict, "team_id")
-            else (user_api_key_dict.get("team_id", "") if isinstance(user_api_key_dict, dict) else ""),
+            "team_id": team_id,
             "api_key_hash": _hash_api_key(api_key),
             "model": model,
             "provider": _get_provider_from_model(model),
@@ -199,6 +232,11 @@ class MarkomAuditLogger(CustomLogger):
             "metadata": {k: v for k, v in metadata.items() if k not in ("guardrail_results", "routing_decision")},
             "prompt_content": prompt_content,
             "response_content": response_content,
+            "purpose_team": purpose_team,
+            "purpose_feature": purpose_feature,
+            "purpose_use_case": purpose_use_case,
+            "data_principal_id": data_principal_id,
+            "redacted": should_redact,
         }
 
         return record
@@ -217,7 +255,9 @@ class MarkomAuditLogger(CustomLogger):
                             model, provider, prompt_tokens, completion_tokens,
                             total_tokens, cost_usd, latency_ms, status,
                             error_message, guardrail_results, routing_decision,
-                            metadata, prompt_content, response_content
+                            metadata, prompt_content, response_content,
+                            purpose_team, purpose_feature, purpose_use_case,
+                            data_principal_id, redacted
                         ) VALUES (
                             to_timestamp(%(timestamp)s), %(request_id)s, %(user_id)s,
                             %(team_id)s, %(api_key_hash)s, %(model)s, %(provider)s,
@@ -225,7 +265,9 @@ class MarkomAuditLogger(CustomLogger):
                             %(cost_usd)s, %(latency_ms)s, %(status)s,
                             %(error_message)s, %(guardrail_results)s::jsonb,
                             %(routing_decision)s::jsonb, %(metadata)s::jsonb,
-                            %(prompt_content)s, %(response_content)s
+                            %(prompt_content)s, %(response_content)s,
+                            %(purpose_team)s, %(purpose_feature)s, %(purpose_use_case)s,
+                            %(data_principal_id)s, %(redacted)s
                         )
                         ON CONFLICT (request_id) DO NOTHING
                         """,
@@ -253,6 +295,7 @@ class MarkomAuditLogger(CustomLogger):
         status: str = None,
         start_time: float = None,
         end_time: float = None,
+        data_principal_id: str = None,
     ) -> list[dict]:
         pool = _get_db_pool()
         if pool is not None:
@@ -277,6 +320,9 @@ class MarkomAuditLogger(CustomLogger):
                 if end_time:
                     conditions.append("timestamp <= to_timestamp(%(end_time)s)")
                     params["end_time"] = end_time
+                if data_principal_id:
+                    conditions.append("data_principal_id = %(data_principal_id)s")
+                    params["data_principal_id"] = data_principal_id
 
                 where = " AND ".join(conditions) if conditions else "1=1"
                 params["limit"] = limit
@@ -370,6 +416,58 @@ class MarkomAuditLogger(CustomLogger):
             "total_completion_tokens": total_completion,
         }
 
+    # ── Data Principal (DPDPA Right to Erasure) ──────────────────────
+
+    @staticmethod
+    def export_principal_data(data_principal_id: str) -> dict:
+        """Export all records tied to a data principal for DPDPA compliance."""
+        records = MarkomAuditLogger.get_audit_records(
+            limit=100000, data_principal_id=data_principal_id
+        )
+        return {
+            "data_principal_id": data_principal_id,
+            "total_records": len(records),
+            "records": records,
+        }
+
+    @staticmethod
+    def delete_principal_data(data_principal_id: str) -> dict:
+        """Delete all prompt/response content for a data principal (soft redact).
+        Audit metadata is preserved for compliance history."""
+        pool = _get_db_pool()
+        deleted = 0
+        if pool is not None:
+            try:
+                with pool.connection() as conn:
+                    cursor = conn.execute(
+                        """
+                        UPDATE markom_audit_log
+                        SET prompt_content = NULL,
+                            response_content = NULL,
+                            data_principal_id = data_principal_id || ':DELETED',
+                            redacted = TRUE
+                        WHERE data_principal_id = %s
+                        """,
+                        (data_principal_id,),
+                    )
+                    deleted = cursor.rowcount
+                    conn.commit()
+            except Exception as e:
+                logger.error("Failed to delete principal data: %s", e)
+
+        # Also purge from in-memory store
+        for r in _audit_store:
+            if r.get("data_principal_id") == data_principal_id:
+                r["prompt_content"] = None
+                r["response_content"] = None
+                r["data_principal_id"] = data_principal_id + ":DELETED"
+                r["redacted"] = True
+                deleted += 1
+
+        return {"data_principal_id": data_principal_id, "records_redacted": deleted}
+
+    # ── Retention & Purge ────────────────────────────────────────────
+
     @staticmethod
     def purge_old_records(retention_days: int = 90) -> int:
         pool = _get_db_pool()
@@ -383,9 +481,35 @@ class MarkomAuditLogger(CustomLogger):
                     )
                     deleted = cursor.rowcount
                     conn.commit()
+                    logger.info("Purged %d audit records older than %d days", deleted, retention_days)
                     return deleted
             except Exception as e:
                 logger.error("Failed to purge old audit records: %s", e)
+        return 0
+
+    @staticmethod
+    def purge_old_prompt_content(retention_days: int = 30) -> int:
+        """Separate retention for raw prompt/response content (shorter than metadata)."""
+        pool = _get_db_pool()
+        if pool is not None:
+            try:
+                cutoff = time.time() - (retention_days * 86400)
+                with pool.connection() as conn:
+                    cursor = conn.execute(
+                        """
+                        UPDATE markom_audit_log
+                        SET prompt_content = NULL, response_content = NULL, redacted = TRUE
+                        WHERE timestamp < to_timestamp(%s)
+                          AND prompt_content IS NOT NULL
+                        """,
+                        (cutoff,),
+                    )
+                    updated = cursor.rowcount
+                    conn.commit()
+                    logger.info("Redacted prompt content in %d records older than %d days", updated, retention_days)
+                    return updated
+            except Exception as e:
+                logger.error("Failed to purge prompt content: %s", e)
         return 0
 
 
