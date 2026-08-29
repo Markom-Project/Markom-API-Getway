@@ -22,7 +22,7 @@ def _get_audit_pool():
     global _db_pool
     if _db_pool is not None:
         return _db_pool
-    dsn = os.environ.get("MARKOM_ADMIN_DB_URL") or os.environ.get("DATABASE_URL")
+    dsn = os.environ.get("MARKOM_DATABASE_URL", "")
     if not dsn:
         return None
     try:

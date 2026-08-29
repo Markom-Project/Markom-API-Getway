@@ -44,8 +44,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-LITELLM_PROXY_URL = os.environ.get("LITELLM_PROXY_URL", "http://localhost:4000")
-LITELLM_MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", os.environ.get("MARKOM_MASTER_KEY", ""))
+MARKOM_LITELLM_URL = os.environ.get("MARKOM_LITELLM_URL", "http://localhost:4000")
+MARKOM_MASTER_KEY = os.environ.get("MARKOM_MASTER_KEY", "")
 
 UI_DIR = Path(__file__).parent / "markom_admin" / "ui"
 if UI_DIR.exists():
@@ -90,7 +90,7 @@ def _require_auth(authorization: str = Header(None)) -> dict:
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header required")
     token = authorization.replace("Bearer ", "")
-    if token != LITELLM_MASTER_KEY:
+    if token != MARKOM_MASTER_KEY:
         from markom_gateway.admin_service.markom_admin.rbac import RBACService
         user = RBACService.get_user_by_api_key(token)
         if not user:
@@ -119,12 +119,12 @@ async def _proxy_to_litellm(
 ) -> dict:
     import httpx
 
-    headers = {"Authorization": f"Bearer {LITELLM_MASTER_KEY}"}
+    headers = {"Authorization": f"Bearer {MARKOM_MASTER_KEY}"}
     if user_info:
         headers["X-User-ID"] = user_info.get("user_id", "")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        url = f"{LITELLM_PROXY_URL}{path}"
+        url = f"{MARKOM_LITELLM_URL}{path}"
         if method == "GET":
             resp = await client.get(url, headers=headers)
         elif method == "POST":

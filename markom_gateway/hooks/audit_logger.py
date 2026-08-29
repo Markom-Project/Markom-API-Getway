@@ -28,10 +28,10 @@ def _get_db_pool():
     global _db_pool
     if _db_pool is not None:
         return _db_pool
-    dsn = os.environ.get("MARKOM_AUDIT_DB_URL") or os.environ.get("DATABASE_URL")
+    dsn = os.environ.get("MARKOM_DATABASE_URL", "")
     if not dsn:
         logger.warning(
-            "No MARKOM_AUDIT_DB_URL or DATABASE_URL set; audit records stored in memory only"
+            "No MARKOM_DATABASE_URL set; audit records stored in memory only"
         )
         return None
     try:

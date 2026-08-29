@@ -87,8 +87,7 @@ See **[LOCAL_DEV.md](LOCAL_DEV.md)** for the full reference with purpose descrip
 ```bash
 OPENAI_API_KEY=sk-your-key-here
 MARKOM_MASTER_KEY=sk-markom-secret-key-change-me
-LITELLM_MASTER_KEY=sk-markom-secret-key-change-me
-DATABASE_URL=postgresql://llmproxy:dbpassword9090@db:5432/litellm
+MARKOM_DATABASE_URL=postgresql://llmproxy:dbpassword9090@db:5432/litellm
 MARKOM_REDIS_URL=redis://redis:6379
 ```
 

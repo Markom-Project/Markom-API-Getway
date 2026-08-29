@@ -24,7 +24,6 @@ cd Markom-API-Getway
 
 # 2. Edit .env — set at minimum:
 #    OPENAI_API_KEY=sk-...
-#    ANTHROPIC_API_KEY=sk-ant-...   (optional)
 #    MARKOM_MASTER_KEY=sk-markom-secret-key-change-me
 
 # 3. Start everything
@@ -51,6 +50,7 @@ pip install -r markom_gateway/requirements.txt
 litellm --config markom_gateway/proxy_config.yaml --port 4000
 
 # 4. Start admin service (terminal 2)
+#    Update MARKOM_LITELLM_URL in .env to http://localhost:4000 first
 uvicorn markom_gateway.admin_service.main:app --port 8000 --reload
 
 # 5. Open http://localhost:8000/dashboard
@@ -91,20 +91,16 @@ At least one is required to make real LLM requests. Without them, the proxy star
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MARKOM_MASTER_KEY` | `sk-markom-secret-key-change-me` | **Change this in production!** Master key that grants full admin access. Used by the admin service to authenticate to LiteLLM. |
-| `LITELLM_MASTER_KEY` | `sk-markom-secret-key-change-me` | Same as above — LiteLLM reads this. Keep both in sync. |
+| `MARKOM_MASTER_KEY` | `sk-markom-secret-key-change-me` | **Change this in production!** Master key for admin access. Used by both the admin service and LiteLLM proxy. Keep this secret. |
 
-### Database (Postgres)
+### Database
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `MARKOM_POSTGRES_ENABLED` | `"true"` | `"true"` = run local Postgres container. `"false"` = use external DB (NeonDB, RDS, etc.) |
-| `DATABASE_URL` | `postgresql://llmproxy:dbpassword9090@db:5432/litellm` | Main Postgres connection string. Used by LiteLLM for model/key storage. If using NeonDB, replace with your NeonDB URL. |
-| `MARKOM_AUDIT_DB_URL` | `""` | Postgres URL for audit trail tables. If empty, falls back to `DATABASE_URL`. Separate DB recommended for production. |
-| `MARKOM_ADMIN_DB_URL` | `""` | Postgres URL for RBAC tables (users, roles, templates). If empty, falls back to `DATABASE_URL`. |
+| `MARKOM_DATABASE_URL` | `postgresql://llmproxy:dbpassword9090@db:5432/litellm` | Single Postgres URL for everything — LiteLLM model/key storage, audit trail tables, RBAC tables. For NeonDB, replace with your NeonDB connection string. |
 | `STORE_MODEL_IN_DB` | `"True"` | LiteLLM setting: store model configs in Postgres instead of just the YAML file. |
 
-**Local dev tip:** Use the default `DATABASE_URL` pointing to the local Postgres container. All three DB URLs can be the same for testing.
+**One URL for everything.** If you need separate databases for audit trail or RBAC in production, you can set `MARKOM_AUDIT_DB_URL` or `MARKOM_ADMIN_DB_URL` as overrides (falls back to `MARKOM_DATABASE_URL`).
 
 ### Redis
 
@@ -141,7 +137,7 @@ At least one is required to make real LLM requests. Without them, the proxy star
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `MARKOM_AUDIT_REDACT_CONTENT` | `"false"` | `"true"` = never store raw prompt/response text. Only metadata (model, cost, latency, tokens) is kept. Safest for compliance. |
-| `MARKOM_AUDIT_RAW_CONTENT_TEAMS` | `""` | Comma-separated team IDs allowed to store raw prompts. Only works when `REDACT_CONTENT=false`. Example: `"team-alpha,team-beta"`. Teams NOT in this list get their prompts redacted. |
+| `MARKOM_AUDIT_RAW_CONTENT_TEAMS` | `""` | Comma-separated team IDs allowed to store raw prompts. Only works when `REDACT_CONTENT=false`. Example: `"team-alpha,team-beta"`. |
 | `MARKOM_AUDIT_RETENTION_DAYS` | `"90"` | Days to keep audit metadata (timestamps, costs, tokens). After this, records are deleted. |
 | `MARKOM_PROMPT_RETENTION_DAYS` | `"30"` | Days to keep raw prompt/response text (if stored). Shorter than metadata retention — content is redacted after this period. |
 | `MARKOM_CACHE_RETENTION_DAYS` | `"30"` | Days to keep cache entries. |
@@ -169,7 +165,7 @@ At least one is required to make real LLM requests. Without them, the proxy star
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `LITELLM_PROXY_URL` | `"http://litellm:4000"` | URL the admin service uses to call LiteLLM's management API. Use `http://localhost:4000` for local Python dev. |
+| `MARKOM_LITELLM_URL` | `"http://litellm:4000"` | URL the admin service uses to call LiteLLM's management API. Use `http://localhost:4000` for local Python dev. |
 | `MARKOM_ADMIN_PORT` | `"8000"` | Port for the admin dashboard API. |
 
 ### Monitoring
@@ -196,11 +192,9 @@ OPENAI_API_KEY=sk-your-key-here
 
 # Required: admin access
 MARKOM_MASTER_KEY=sk-markom-secret-key-change-me
-LITELLM_MASTER_KEY=sk-markom-secret-key-change-me
 
 # Database (local Docker Postgres)
-MARKOM_POSTGRES_ENABLED=true
-DATABASE_URL=postgresql://llmproxy:dbpassword9090@db:5432/litellm
+MARKOM_DATABASE_URL=postgresql://llmproxy:dbpassword9090@db:5432/litellm
 
 # Redis (local Docker Redis)
 MARKOM_REDIS_ENABLED=true
@@ -217,7 +211,7 @@ MARKOM_AUDIT_RETENTION_DAYS=90
 MARKOM_PROMPT_RETENTION_DAYS=30
 
 # Admin service (connects to local LiteLLM)
-LITELLM_PROXY_URL=http://litellm:4000
+MARKOM_LITELLM_URL=http://litellm:4000
 
 # Monitoring (optional, disable to save resources)
 MARKOM_PROMETHEUS_ENABLED=false
@@ -322,7 +316,7 @@ curl -X POST http://localhost:8000/api/accounts \
 | `Connection refused` on port 6379 | Redis not started — run `docker compose --profile redis up -d` |
 | `Invalid API key` on dashboard | The key must match `MARKOM_MASTER_KEY` or be a user's API key in `markom_users` table |
 | Semantic cache not working | Check `OPENAI_API_KEY` is set (embedding model needs it) |
-| Audit records empty | Check `DATABASE_URL` is set and Postgres is running |
+| Audit records empty | Check `MARKOM_DATABASE_URL` is set and Postgres is running |
 | Health scores not updating | Check `MARKOM_REDIS_URL` is correct and Redis is running |
 
 ---
