@@ -60,42 +60,12 @@ fi
 echo ""
 $COMPOSE down --remove-orphans 2>/dev/null || true
 
-# ── Start Infrastructure (Postgres + Redis) ─────────────────
+# ── Start Core Services ─────────────────────────────────────
 
 echo ""
 echo "─── MarKom Gateway — Starting ─────────────────────────"
 echo ""
 
-info "Starting Postgres + Redis..."
-$COMPOSE up -d db redis
-
-# Wait for Postgres
-echo -n "  Waiting for Postgres"
-for i in $(seq 1 30); do
-    if $COMPOSE exec -T db pg_isready -d litellm -U llmproxy &> /dev/null 2>&1; then
-        echo ""
-        info "Postgres ready"
-        break
-    fi
-    echo -n "."
-    sleep 1
-done
-
-# Wait for Redis
-echo -n "  Waiting for Redis"
-for i in $(seq 1 15); do
-    if $COMPOSE exec -T redis redis-cli ping &> /dev/null 2>&1; then
-        echo ""
-        info "Redis ready"
-        break
-    fi
-    echo -n "."
-    sleep 1
-done
-
-# ── Start Core Services ─────────────────────────────────────
-
-echo ""
 info "Building and starting LiteLLM + Admin service..."
 $COMPOSE --profile core up -d --build
 
@@ -140,8 +110,6 @@ echo "  Dashboard:     http://localhost:8000/dashboard"
 echo "  Login key:     ${MARKOM_MASTER_KEY}"
 echo ""
 echo "  LiteLLM:       http://localhost:4000"
-echo "  Postgres:      localhost:5433"
-echo "  Redis:         localhost:6380"
 echo ""
 
 if [ "${MARKOM_PROMETHEUS_ENABLED:-false}" = "true" ]; then

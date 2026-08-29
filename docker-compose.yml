@@ -15,9 +15,6 @@ services:
       - "4000:4000"
     env_file:
       - .env
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test:
         - CMD-SHELL
@@ -38,8 +35,6 @@ services:
     env_file:
       - .env
     depends_on:
-      db:
-        condition: service_healthy
       litellm:
         condition: service_healthy
     healthcheck:
@@ -49,25 +44,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # ─── Infra: Postgres (always starts) ─────────────────────
-  db:
-    image: postgres:16
-    restart: always
-    container_name: litellm_db
-    environment:
-      POSTGRES_DB: litellm
-      POSTGRES_USER: llmproxy
-      POSTGRES_PASSWORD: dbpassword9090
-    ports:
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d litellm -U llmproxy"]
-      interval: 1s
-      timeout: 5s
-      retries: 10
 
   # ─── Monitoring: Prometheus ──────────────────────────────
   prometheus:
@@ -108,5 +84,3 @@ volumes:
     driver: local
   grafana_data:
     driver: local
-  postgres_data:
-    name: litellm_postgres_data
