@@ -52,9 +52,8 @@ services:
       timeout: 10s
       retries: 3
 
-  # ─── Infra: Postgres ─────────────────────────────────────
+  # ─── Infra: Postgres (always starts) ─────────────────────
   db:
-    profiles: ["postgres"]
     image: postgres:16
     restart: always
     container_name: litellm_db
@@ -72,12 +71,11 @@ services:
       timeout: 5s
       retries: 10
 
-  # ─── Infra: Redis ────────────────────────────────────────
+  # ─── Infra: Redis (always starts) ────────────────────────
   redis:
-    profiles: ["redis"]
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     volumes:
       - redis_data:/data
     healthcheck:

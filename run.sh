@@ -21,20 +21,18 @@ error() { echo -e "${RED}[✗]${NC} $1"; }
 # ── Check Docker ────────────────────────────────────────────
 
 if ! command -v docker &> /dev/null; then
-    error "Docker not installed. Install it from https://docs.docker.com/get-docker/"
+    error "Docker not installed. Install from https://docs.docker.com/get-docker/"
     exit 1
 fi
 
 if ! docker info &> /dev/null 2>&1; then
-    warn "Docker daemon not running or no permission. Trying with sudo..."
+    warn "Docker needs sudo. Trying..."
     if ! sudo docker info &> /dev/null 2>&1; then
-        error "Cannot connect to Docker. Start Docker Desktop or run: sudo systemctl start docker"
+        error "Cannot connect to Docker. Start Docker Desktop or: sudo systemctl start docker"
         exit 1
     fi
-    DOCKER="sudo docker"
     COMPOSE="sudo docker compose"
 else
-    DOCKER="docker"
     COMPOSE="docker compose"
 fi
 
@@ -42,41 +40,36 @@ fi
 
 if [ ! -f .env ]; then
     error ".env file not found."
-    echo "  Create one with at minimum:"
+    echo "  Create with:"
     echo '    GOOGLE_API_KEY=your-key'
     echo '    MARKOM_MASTER_KEY=sk-markom-secret-key-change-me'
     exit 1
 fi
 
-# Load .env
 set -a
 source .env
 set +a
 
-# Check required keys
-if [ -z "${GOOGLE_API_KEY:-}" ]; then
-    warn "GOOGLE_API_KEY not set — semantic cache embeddings will fail"
-fi
 if [ -z "${MARKOM_MASTER_KEY:-}" ]; then
-    error "MARKOM_MASTER_KEY not set — cannot start"
+    error "MARKOM_MASTER_KEY not set in .env"
     exit 1
 fi
 
-# ── Start Infrastructure ────────────────────────────────────
+# ── Stop any existing containers ────────────────────────────
+
+echo ""
+$COMPOSE down --remove-orphans 2>/dev/null || true
+
+# ── Start Infrastructure (Postgres + Redis) ─────────────────
 
 echo ""
 echo "─── MarKom Gateway — Starting ─────────────────────────"
 echo ""
 
-# Postgres
-info "Starting Postgres..."
-$COMPOSE --profile postgres up -d db
+info "Starting Postgres + Redis..."
+$COMPOSE up -d db redis
 
-# Redis
-info "Starting Redis..."
-$COMPOSE --profile redis up -d redis
-
-# Wait for Postgres to be healthy
+# Wait for Postgres
 echo -n "  Waiting for Postgres"
 for i in $(seq 1 30); do
     if $COMPOSE exec -T db pg_isready -d litellm -U llmproxy &> /dev/null 2>&1; then
@@ -88,7 +81,7 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Wait for Redis to be healthy
+# Wait for Redis
 echo -n "  Waiting for Redis"
 for i in $(seq 1 15); do
     if $COMPOSE exec -T redis redis-cli ping &> /dev/null 2>&1; then
@@ -106,7 +99,7 @@ echo ""
 info "Building and starting LiteLLM + Admin service..."
 $COMPOSE --profile core up -d --build
 
-# Wait for LiteLLM to be healthy
+# Wait for LiteLLM
 echo -n "  Waiting for LiteLLM"
 for i in $(seq 1 40); do
     if curl -s http://localhost:4000/health/liveliness &> /dev/null 2>&1; then
@@ -118,7 +111,7 @@ for i in $(seq 1 40); do
     sleep 2
 done
 
-# Wait for Admin service to be healthy
+# Wait for Admin service
 echo -n "  Waiting for Admin service"
 for i in $(seq 1 20); do
     if curl -s http://localhost:8000/health &> /dev/null 2>&1; then
@@ -148,7 +141,7 @@ echo "  Login key:     ${MARKOM_MASTER_KEY}"
 echo ""
 echo "  LiteLLM:       http://localhost:4000"
 echo "  Postgres:      localhost:5433"
-echo "  Redis:         localhost:6379"
+echo "  Redis:         localhost:6380"
 echo ""
 
 if [ "${MARKOM_PROMETHEUS_ENABLED:-false}" = "true" ]; then
