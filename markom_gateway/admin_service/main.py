@@ -44,6 +44,7 @@ class UserRole(BaseModel):
     team_id: Optional[str] = None
     email: Optional[str] = None
     display_name: Optional[str] = None
+    api_key: Optional[str] = None
 
 
 class AuditQuery(BaseModel):

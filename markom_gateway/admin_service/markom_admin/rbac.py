@@ -95,6 +95,7 @@ def _ensure_rbac_tables(pool):
                     email TEXT,
                     display_name TEXT,
                     role TEXT NOT NULL DEFAULT 'viewer',
+                    api_key_hash TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 );
@@ -112,6 +113,7 @@ def _ensure_rbac_tables(pool):
                 CREATE INDEX IF NOT EXISTS idx_roles_user ON markom_roles (user_id);
                 CREATE INDEX IF NOT EXISTS idx_roles_team ON markom_roles (team_id);
                 CREATE INDEX IF NOT EXISTS idx_users_external ON markom_users (external_id);
+                CREATE INDEX IF NOT EXISTS idx_users_api_key ON markom_users (api_key_hash);
                 """
             )
             conn.commit()
@@ -165,6 +167,33 @@ class RBACService:
         return permission in ROLE_PERMISSIONS.get(role, set())
 
     @staticmethod
+    def get_user_by_api_key(api_key: str) -> Optional[dict]:
+        """Look up a user by their API key hash. Returns dict with external_id and role."""
+        if not api_key:
+            return None
+        pool = _get_db_pool()
+        if pool is None:
+            return None
+        try:
+            api_key_hash = _hash_api_key(api_key)
+            with pool.connection() as conn:
+                cursor = conn.execute(
+                    "SELECT external_id, role, email, display_name FROM markom_users WHERE api_key_hash = %s",
+                    (api_key_hash,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "external_id": row[0],
+                        "role": row[1],
+                        "email": row[2],
+                        "display_name": row[3],
+                    }
+        except Exception as e:
+            logger.error("Failed to look up user by API key: %s", e)
+        return None
+
+    @staticmethod
     def set_user_role(
         user_external_id: str,
         role: str,
@@ -172,6 +201,7 @@ class RBACService:
         display_name: str = None,
         team_id: str = None,
         granted_by: str = None,
+        api_key: str = None,
     ) -> bool:
         if role not in ROLE_PERMISSIONS:
             raise ValueError(f"Invalid role: {role}. Must be one of: {list(ROLE_PERMISSIONS.keys())}")
@@ -180,19 +210,21 @@ class RBACService:
             logger.warning("Cannot set role: no database connection")
             return False
         try:
+            api_key_hash = _hash_api_key(api_key) if api_key else None
             with pool.connection() as conn:
                 cursor = conn.execute(
                     """
-                    INSERT INTO markom_users (external_id, email, display_name, role)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO markom_users (external_id, email, display_name, role, api_key_hash)
+                    VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (external_id) DO UPDATE SET
                         email = COALESCE(EXCLUDED.email, markom_users.email),
                         display_name = COALESCE(EXCLUDED.display_name, markom_users.display_name),
                         role = EXCLUDED.role,
+                        api_key_hash = COALESCE(EXCLUDED.api_key_hash, markom_users.api_key_hash),
                         updated_at = NOW()
                     RETURNING id
                     """,
-                    (user_external_id, email, display_name, role),
+                    (user_external_id, email, display_name, role, api_key_hash),
                 )
                 user_db_id = cursor.fetchone()[0]
 
