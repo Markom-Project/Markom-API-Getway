@@ -18,8 +18,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     healthcheck:
       test:
         - CMD-SHELL
@@ -71,19 +69,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # ─── Infra: Redis (always starts) ────────────────────────
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ─── Monitoring: Prometheus ──────────────────────────────
   prometheus:
     profiles: ["monitoring"]
@@ -125,5 +110,3 @@ volumes:
     driver: local
   postgres_data:
     name: litellm_postgres_data
-  redis_data:
-    driver: local
