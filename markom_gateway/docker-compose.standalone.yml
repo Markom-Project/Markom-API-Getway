@@ -1,0 +1,24 @@
+services:
+  markom-gateway:
+    build:
+      context: ..
+      dockerfile: markom_gateway/Dockerfile.runtime
+    ports:
+      - "${MARKOM_PORT:-4000}:4000"
+    environment:
+      MARKOM_MASTER_KEY: ${MARKOM_MASTER_KEY:?Set MARKOM_MASTER_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      MARKOM_MODEL_ROUTES: ${MARKOM_MODEL_ROUTES:-{}}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:4000/health')"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

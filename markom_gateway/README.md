@@ -1,6 +1,35 @@
 # MarKom Gateway
 
-Production layer on top of LiteLLM — rebranded, with semantic caching, health-based routing, RBAC governance, and DPDPA-compliant audit trail.
+MarKom Gateway includes an independent OpenRouter-backed inference runtime and existing administration and governance services that still integrate with LiteLLM.
+
+## Standalone inference service
+
+The standalone runtime is an independent OpenAI-compatible HTTP API backed by OpenRouter. It supports `GET /v1/models`, `POST /v1/chat/completions`, streaming responses, and a gateway bearer key. This is the first step toward replacing the existing LiteLLM dependency; the admin service and existing hooks still depend on LiteLLM and are not standalone yet.
+
+Set `MARKOM_MASTER_KEY` and `OPENROUTER_API_KEY`, then start the runtime with Docker Compose:
+
+```bash
+docker compose -f markom_gateway/docker-compose.standalone.yml up --build
+```
+
+Send OpenAI-compatible requests to `http://localhost:4000/v1` using `MARKOM_MASTER_KEY` as the client API key. The `model` value is passed to OpenRouter unchanged.
+
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer $MARKOM_MASTER_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"openai/gpt-4o-mini","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+### Model routing and fallbacks
+
+Configure `OPENAI_API_KEY` to enable direct OpenAI routing. `MARKOM_MODEL_ROUTES` maps a gateway model name to an ordered list of provider/model targets. The gateway tries the next target on a network error, HTTP 429, or HTTP 5xx response. It does not retry client errors.
+
+```bash
+export MARKOM_MODEL_ROUTES='{"assistant":{"targets":[{"provider":"openai","model":"gpt-4o-mini"},{"provider":"openrouter","model":"openai/gpt-4o-mini"}]}}'
+```
+
+Requests use `"model":"assistant"`, and `GET /v1/models` returns configured route names. OpenRouter remains the default for model IDs without a configured route.
 
 ## Architecture
 
@@ -166,7 +195,7 @@ Optional PII detection and redaction in prompts. Supports email, phone, SSN, cre
 | `GET` | `/api/incidents/guardrail-violations` | tab access | Repeated violation detection |
 | `GET` | `/api/incidents/summary` | tab access | Aggregate incident counts |
 
-## Upgrading LiteLLM
+## Upgrading the existing LiteLLM integration
 
 The `markom_gateway/` directory is additive — no LiteLLM core files are modified. To upgrade:
 
